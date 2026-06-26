@@ -1,82 +1,51 @@
 """
-Issue #8: Built-in dataset support — AG News, IMDB, 20Newsgroups.
+Issue #8: Built-in dataset support for NLP AutoML experiments.
 """
 from __future__ import annotations
 import logging
-from typing import Any
-
 log = logging.getLogger(__name__)
 
-AVAILABLE = ["ag_news", "imdb", "20newsgroups", "sst2"]
 
-
-def load(name: str, max_samples: int | None = None
-         ) -> tuple[list[str], list[int], list[str], list[int]]:
+def load_dataset(name: str) -> tuple[list[str], list[int], list[str], list[int]]:
     """
-    Load a built-in classification dataset.
+    Load a standard NLP classification dataset.
     Returns (X_train, y_train, X_test, y_test).
+
+    Supported: ag_news, imdb, 20newsgroups, sst2
     """
-    if name == "ag_news":
-        return _ag_news(max_samples)
-    if name == "imdb":
-        return _imdb(max_samples)
+    name = name.lower()
     if name == "20newsgroups":
-        return _20newsgroups(max_samples)
-    if name == "sst2":
-        return _sst2(max_samples)
-    raise ValueError(f"Unknown dataset: {name}. Available: {AVAILABLE}")
+        return _load_20news()
+    if name in ("ag_news", "imdb", "sst2"):
+        return _load_hf(name)
+    raise ValueError(f"Unknown dataset: {name}. Choices: ag_news, imdb, 20newsgroups, sst2")
 
 
-def _ag_news(n=None):
-    try:
-        from datasets import load_dataset as hf_load
-        ds = hf_load("ag_news")
-        tr = ds["train"].select(range(min(n or 10000, len(ds["train"]))))
-        te = ds["test"].select(range(min(n or 2000, len(ds["test"])) // 5))
-        return list(tr["text"]), list(tr["label"]), list(te["text"]), list(te["label"])
-    except ImportError:
-        return _demo_data("ag_news")
-
-
-def _imdb(n=None):
-    try:
-        from datasets import load_dataset as hf_load
-        ds = hf_load("imdb")
-        tr = ds["train"].select(range(min(n or 5000, len(ds["train"]))))
-        te = ds["test"].select(range(min(n or 1000, len(ds["test"]))))
-        return list(tr["text"]), list(tr["label"]), list(te["text"]), list(te["label"])
-    except ImportError:
-        return _demo_data("imdb")
-
-
-def _20newsgroups(n=None):
+def _load_20news() -> tuple:
     from sklearn.datasets import fetch_20newsgroups
-    tr = fetch_20newsgroups(subset="train", remove=("headers", "footers", "quotes"))
-    te = fetch_20newsgroups(subset="test",  remove=("headers", "footers", "quotes"))
-    x_tr, y_tr = tr.data[:n], list(tr.target[:n])
-    x_te, y_te = te.data[:n], list(te.target[:n])
-    return x_tr, y_tr, x_te, y_te
+    train = fetch_20newsgroups(subset="train", remove=("headers","footers","quotes"))
+    test  = fetch_20newsgroups(subset="test",  remove=("headers","footers","quotes"))
+    log.info("Loaded 20newsgroups: %d train / %d test", len(train.data), len(test.data))
+    return train.data, list(train.target), test.data, list(test.target)
 
 
-def _sst2(n=None):
+def _load_hf(name: str) -> tuple:
     try:
         from datasets import load_dataset as hf_load
-        ds = hf_load("sst2")
-        tr = ds["train"].select(range(min(n or 5000, len(ds["train"]))))
-        te = ds["validation"]
-        return list(tr["sentence"]), list(tr["label"]), list(te["sentence"]), list(te["label"])
     except ImportError:
-        return _demo_data("sst2")
+        raise ImportError("pip install datasets")
 
+    mapping = {"ag_news": ("ag_news",None), "imdb": ("imdb",None), "sst2": ("glue","sst2")}
+    ds_name, config = mapping[name]
+    ds = hf_load(ds_name, config)
 
-def _demo_data(name: str):
-    """Tiny demo data when datasets library not available."""
-    log.warning("datasets not installed — using tiny demo data. pip install datasets")
-    texts = [
-        "This is a positive example of text classification.",
-        "Negative sentiment detected in this sentence.",
-        "Neutral factual statement about the topic.",
-        "Another example for training the model here.",
-    ] * 10
-    labels = [0, 1, 2, 1] * 10
-    return texts[:30], labels[:30], texts[30:], labels[30:]
+    split = "train" if "train" in ds else list(ds.keys())[0]
+    train = ds["train"]
+    test  = ds.get("test", ds.get("validation", train.select(range(min(2000,len(train))))))
+
+    text_col  = "text" if "text"  in train.features else "sentence"
+    label_col = "label" if "label" in train.features else "labels"
+
+    log.info("Loaded %s: %d train / %d test", name, len(train), len(test))
+    return (list(train[text_col]), list(train[label_col]),
+            list(test[text_col]),  list(test[label_col]))
