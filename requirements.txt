@@ -1,0 +1,24 @@
+# NLP AutoML with Optuna — Requirements
+# pip install -r requirements.txt
+
+# Core ML
+scikit-learn>=1.5.0
+numpy>=1.26.0
+pandas>=2.2.0
+
+# Hyperparameter optimization
+optuna>=3.6.0
+plotly>=5.22.0  # for Optuna visualizations
+
+# NLP
+nltk>=3.8.1
+
+# ONNX export (optional)
+# onnxruntime>=1.18.0
+# skl2onnx>=1.16.0
+
+# Experiment tracking (optional)
+# mlflow>=2.13.0
+
+# Development
+tqdm>=4.66.0
